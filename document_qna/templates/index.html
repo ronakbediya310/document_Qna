@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document Q&A</title>
+    <link rel="stylesheet" href="{% static 'styles.css' %}" />
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  </head>
+
+  <body>
+    <div class="main-container">
+      <!-- Header Section -->
+      <header>
+        <h1>Document Q&A System</h1>
+        <!-- Toggle Upload Section -->
+        <div class="toggle-container">
+          <label>Show Upload Section</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-upload" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </header>
+
+      <!-- Upload Section -->
+      <div id="upload-container">
+        <section class="upload-section">
+          <h2>Upload a Document (PDF, JSON, CSV)</h2>
+          <form method="post" enctype="multipart/form-data" class="form">
+            {% csrf_token %}
+            <label for="document-upload" class="upload-label"
+              >Choose a File</label
+            >
+            <input
+              type="file"
+              id="document-upload"
+              name="document"
+              class="file-input"
+              accept=".pdf,.json,.csv"
+            />
+            <button type="submit" class="btn">Upload</button>
+          </form>
+        </section>
+      </div>
+
+      <!-- Query & Response Container -->
+      <div class="query-response-container">
+        <!-- Query Section -->
+        <section class="query-section">
+          <h2>Ask a Question</h2>
+          <form method="post" class="form" id="query-form">
+            {% csrf_token %}
+            <textarea
+              id="query"
+              name="query"
+              placeholder="Enter your question here..."
+              class="text-input"
+            ></textarea>
+            <button type="submit" class="btn">Ask</button>
+          </form>
+        </section>
+
+        <!-- Response Section -->
+        <section class="response-content response-section">
+          <h3>Response Section...</h3>
+          <div class="loader" id="loader" style="display: none"></div>
+          <p><strong id="res" style="display: none">Response:</strong></p>
+          <span class="answer" style="display: none"></span>
+          <p>
+            <strong id="restime" style="display: none">Response Time:</strong>
+            <span class="response-time" style="display: none"></span>
+          </p>
+
+          <!-- Titles List Section -->
+          <div id="titles-container" style="display: none">
+            <h4>Extracted Titles:</h4>
+            <ul id="titles-list"></ul>
+          </div>
+
+          <p id="document-download" style="display: none">
+            <a id="document-link" href="#" target="_blank"
+              >Download Retrieved Document</a
+            >
+          </p>
+          <p
+            id="message-response"
+            class="message-box"
+            style="display: none"
+          ></p>
+        </section>
+      </div>
+
+      <!-- Messages & Error Handling -->
+      {% if message %}
+      <div class="message-box">{{ message }}</div>
+      {% endif %} {% if error %}
+      <div class="error-box">{{ error }}</div>
+      {% endif %}
+    </div>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+      $(document).ready(function () {
+        $("#query-form").submit(function (event) {
+          event.preventDefault();
+          var queryText = $("#query").val().trim();
+          $("#query").val("");
+          if (!queryText) {
+            alert("Please enter a question.");
+            return;
+          }
+          $("#res, #restime").hide();
+          $("#loader").show();
+          $(".answer, .response-time").hide();
+          $("#document-download").hide();
+          $("#message-response").hide().text("");
+          $("#titles-list").empty();
+
+          var csrfToken = $("input[name='csrfmiddlewaretoken']").val();
+          $.ajax({
+            url: "{% url 'index' %}",
+            type: "POST",
+            data: { query: queryText, csrfmiddlewaretoken: csrfToken },
+            dataType: "json",
+            success: function (response) {
+              $("#res, #restime").show();
+              $(".answer")
+                .text(response.answer || "No answer received.")
+                .show();
+              $(".response-time")
+                .text(
+                  response.response_time
+                    ? response.response_time + " seconds"
+                    : "N/A"
+                )
+                .show();
+
+              // Display extracted titles
+              if (response.titles && response.titles.length > 0) {
+                $("#titles-container").show();
+                response.titles.forEach(function (title, index) {
+                  $("#titles-list").append(`<li>${index + 1}. ${title}</li>`);
+                });
+              } else {
+                $("#titles-container").hide();
+              }
+
+              // If a document link is available, show the download link
+              if (response.document_link) {
+                $("#document-link").attr("href", response.document_link);
+                $("#document-download").show();
+              }
+
+              $("#message-response")
+                .text("Response received successfully!")
+                .fadeIn()
+                .delay(3000)
+                .fadeOut();
+            },
+            error: function () {
+              alert("An error occurred. Please try again.");
+            },
+            complete: function () {
+              $("#loader").hide();
+            },
+          });
+        });
+      });
+    </script>
+  </body>
+</html>
