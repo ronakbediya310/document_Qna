@@ -87,3 +87,4 @@ mysqlclient == 2.2.7
  pymysql
 pypdf
 sentence-transformers
+dotenv
