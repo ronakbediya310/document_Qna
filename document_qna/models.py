@@ -15,7 +15,10 @@ class SourceDocument(models.Model):
         return self.query
 
 
+from django.db import models
+
 class UnansweredQuestion(models.Model):
+    id = models.AutoField(primary_key=True)  
     question = models.TextField(unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
