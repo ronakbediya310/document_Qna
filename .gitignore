@@ -92,6 +92,3 @@ docker-compose.override.yml
 *.mo
 settings.py
 
-### WSGI and ASGI ###
-wsgi.py
-asgi.py

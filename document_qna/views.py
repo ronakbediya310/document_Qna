@@ -5,6 +5,11 @@ import pymysql
 import re
 import spacy
 import pickle
+from django.http import JsonResponse, FileResponse
+from django.shortcuts import get_object_or_404
+from .models import SourceDocument
+from .models import UnansweredQuestion
+from django.core.files import File
 from django.core.cache import cache
 from docx import Document
 from django.http import JsonResponse
@@ -63,7 +68,7 @@ prompt = ChatPromptTemplate.from_template(
     """
 )
 
-
+latest_query = ""
 ## Memory concept :
 CHAT_HISTORY_LIMIT = 10
 memory = ConversationBufferWindowMemory(
@@ -239,26 +244,13 @@ def process_new_document(file_path):
 
 
 def save_unanswered_question(question):
-    """Store unanswered questions in a DOCX file inside the media folder."""
-    media_path = os.path.join(settings.MEDIA_ROOT, "unanswered_questions.docx")
+    """Store unanswered questions in the database."""
+    if not UnansweredQuestion.objects.filter(question=question).exists():
+        UnansweredQuestion.objects.create(question=question)
 
-    if os.path.exists(media_path):
-        doc = Document(media_path)
-    else:
-        doc = Document()
-        doc.add_heading("Unanswered Questions", level=1)
+def get_unanswered_questions():
+    return UnansweredQuestion.objects.all()
 
-    existing_questions = [
-        para.text
-        for para in doc.paragraphs
-        if para.text and para.text.strip() and not para.style.name.startswith("Heading")
-    ]
-
-    if question not in existing_questions:
-        doc.add_paragraph(f"{len(existing_questions) + 1}. {question}")
-
-    # Save the updated document
-    doc.save(media_path)
 
 
 # Global variable to store retrieval_chain in memory
@@ -291,7 +283,7 @@ def get_retrieval_chain():
 
 def store_retrieved_documents(user_query, response, save_results=False):
     """
-    Stores the retrieved source documents in a Word file for performance measurement.
+    Stores the retrieved source documents in a Word file and saves them in the database.
     """
     if not save_results:
         return None
@@ -304,12 +296,40 @@ def store_retrieved_documents(user_query, response, save_results=False):
     doc_filename = os.path.join(folder_name, f"{safe_filename}.docx")
     doc.add_heading(f"Results for: {user_query}", level=1)
 
+    text_content = ""
+
     for i, content in enumerate(response.get("source_documents", []), start=1):
         doc.add_heading(f"Document {i}", level=2)
         doc.add_paragraph(content.page_content)
+        text_content += f"Document {i}:\n{content.page_content}\n\n"
 
-    doc.save(doc_filename)
+    doc.save(doc_filename)  # Save Word file
+
+    # Save to database
+    source_doc, created = SourceDocument.objects.update_or_create(
+        query=user_query,
+        defaults={"file_path":  f"/media/retrieved_docs/{os.path.basename(doc_filename)}", "content": text_content},
+    )
+    print(created)
+
     return doc_filename
+
+
+## This code related to fetching source documents from db.
+def view_source_document(query):
+    document = get_object_or_404(SourceDocument, query=query)
+    # print(document.content)
+    # print("ronak")
+    return JsonResponse({"content": document.content})
+
+
+def download_source_document(query):
+    document = get_object_or_404(SourceDocument, query=query)
+
+    if document.file_path:
+        return FileResponse(open(document.file_path.path, "rb"), as_attachment=True)
+    else:
+        return JsonResponse({"error": "No file available"}, status=404)
 
 
 ## This is the Index view of Django.
@@ -322,6 +342,9 @@ def index(request):
             if process_new_document(file_path):
                 return render(request, "index.html", {"message": "Upload successful!"})
             return render(request, "index.html", {"error": "Upload failed!"})
+        
+        elif "fetch" in request.POST and "query" in request.POST:
+            return view_source_document(query=request.POST["query"])
 
         elif "query" in request.POST:
             ## First check the cache if chain not found create it.
@@ -354,14 +377,16 @@ def index(request):
             ):
                 save_unanswered_question(user_query)
             ## Storing the Source Documents for Performance Measure.
-            file_name = store_retrieved_documents(user_query, response, False)
+            file_name = store_retrieved_documents(user_query, response, True)
 
             return JsonResponse(
                 {
                     "answer": answer,
-                    # "document_link": f"/media/retrieved_docs/{os.path.basename(file_name)}",
+                    "document_link": f"/media/retrieved_docs/{os.path.basename(file_name)}",
                     "response_time": response_time,
+                    
                 }
             )
 
+        
     return render(request, "index.html")

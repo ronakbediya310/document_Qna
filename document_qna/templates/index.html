@@ -12,20 +12,19 @@
   <body>
     <div class="main-container">
       <!-- Header Section -->
-      <header>
-        <h1>Document Q&A System</h1>
-        <!-- Toggle Upload Section -->
-        <div class="toggle-container">
+      <!-- <header> -->
+      <h1>Document Q&A System</h1>
+      <!-- <div class="toggle-container">
           <label>Show Upload Section</label>
           <label class="toggle-switch">
             <input type="checkbox" id="toggle-upload" checked />
             <span class="slider"></span>
           </label>
         </div>
-      </header>
+      </header>  -->
 
       <!-- Upload Section -->
-      <div id="upload-container">
+      <!-- <div id="upload-container">
         <section class="upload-section">
           <h2>Upload a Document (PDF, JSON, CSV)</h2>
           <form method="post" enctype="multipart/form-data" class="form">
@@ -42,12 +41,11 @@
             />
             <button type="submit" class="btn">Upload</button>
           </form>
-        </section>
-      </div>
+        </section> 
+       </div> -->
 
       <!-- Query & Response Container -->
       <div class="query-response-container">
-        <!-- Query Section -->
         <section class="query-section">
           <h2>Ask a Question</h2>
           <form method="post" class="form" id="query-form">
@@ -65,25 +63,30 @@
         <!-- Response Section -->
         <section class="response-content response-section">
           <h3>Response Section...</h3>
-          <div class="loader" id="loader" style="display: none"></div>
-          <p><strong id="res" style="display: none">Response:</strong></p>
-          <span class="answer" style="display: none"></span>
-          <p>
-            <strong id="restime" style="display: none">Response Time:</strong>
-            <span class="response-time" style="display: none"></span>
-          </p>
-
-          <!-- Titles List Section -->
-          <div id="titles-container" style="display: none">
-            <h4>Extracted Titles:</h4>
-            <ul id="titles-list"></ul>
+          <div class="chat-history">
+            <div id="chat-history">
+              <div id="chat-loader" style="display: none">
+                <div class="chat-bubble chat-bot">
+                  <div class="loader" id="loader"></div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <p id="document-download" style="display: none">
-            <a id="document-link" href="#" target="_blank"
-              >Download Retrieved Document</a
-            >
-          </p>
+          <!-- Fetch Source Documents Button -->
+          <button
+            id="fetch-docs-btn"
+            class="btn"
+            style="display: none"
+            name="fetch-docs-btn"
+          >
+            Fetch Source Documents
+          </button>
+
+          <div id="source-docs-container" style="display: none">
+            <h4>📄 Source Documents</h4>
+            <div id="source-docs-list" class="docs-list"></div>
+          </div>
           <p
             id="message-response"
             class="message-box"
@@ -99,25 +102,46 @@
       <div class="error-box">{{ error }}</div>
       {% endif %}
     </div>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
     <script>
       $(document).ready(function () {
+        var lastQuery = ""; // Store the last query
+        var lastQueries = [];
+        var lastResponses = [];
+        $("#toggle-upload").change(function () {
+          $("#upload-container").slideToggle(300, function () {
+            if ($("#upload-container").is(":visible")) {
+              $(".query-response-container").removeClass("full-height");
+            } else {
+              $(".query-response-container").addClass("full-height");
+            }
+          });
+        });
+
+        $(".message-box").fadeIn().delay(3000).fadeOut();
+
+        // AJAX Query Form Submission
         $("#query-form").submit(function (event) {
           event.preventDefault();
           var queryText = $("#query").val().trim();
+          $("#fetch-docs-btn").hide();
+          $("#source-docs-container").hide();
           $("#query").val("");
+
           if (!queryText) {
             alert("Please enter a question.");
             return;
           }
+          $("#chat-loader").show();
+          lastQuery = queryText; // Store the query for later use
+
           $("#res, #restime").hide();
           $("#loader").show();
           $(".answer, .response-time").hide();
-          $("#document-download").hide();
           $("#message-response").hide().text("");
-          $("#titles-list").empty();
 
           var csrfToken = $("input[name='csrfmiddlewaretoken']").val();
+
           $.ajax({
             url: "{% url 'index' %}",
             type: "POST",
@@ -128,29 +152,19 @@
               $(".answer")
                 .text(response.answer || "No answer received.")
                 .show();
-              $(".response-time")
-                .text(
-                  response.response_time
-                    ? response.response_time + " seconds"
-                    : "N/A"
-                )
-                .show();
 
-              // Display extracted titles
-              if (response.titles && response.titles.length > 0) {
-                $("#titles-container").show();
-                response.titles.forEach(function (title, index) {
-                  $("#titles-list").append(`<li>${index + 1}. ${title}</li>`);
-                });
-              } else {
-                $("#titles-container").hide();
+              // Store only the last 3 queries & responses
+              if (lastQueries.length >= 3) {
+                lastQueries.shift();
+                lastResponses.shift();
               }
+              lastQueries.push(queryText);
+              lastResponses.push(response.answer || "No answer received.");
 
-              // If a document link is available, show the download link
-              if (response.document_link) {
-                $("#document-link").attr("href", response.document_link);
-                $("#document-download").show();
-              }
+              updateChatHistory();
+
+              // Show fetch button after receiving response
+              $("#fetch-docs-btn").show();
 
               $("#message-response")
                 .text("Response received successfully!")
@@ -163,6 +177,117 @@
             },
             complete: function () {
               $("#loader").hide();
+            },
+          });
+        });
+        function updateChatHistory() {
+          var historyContainer = $("#chat-history");
+          historyContainer.empty();
+
+          for (let i = 0; i < lastQueries.length; i++) {
+            let userMessage = `<div class="chat-message user">
+                              <div class="chat-bubble chat-user">Question: ${lastQueries[i]}</div>
+                           </div>`;
+            let botMessage = `<div class="chat-message bot">
+                              <div class="chat-bubble chat-bot">Answer: ${lastResponses[i]}</div>
+                           </div>`;
+
+            historyContainer.append(userMessage);
+            historyContainer.append(botMessage);
+          }
+
+          // Add loader message at the end (if waiting for response)
+          if ($("#loader-container").is(":visible")) {
+            historyContainer.append(`
+            <div class="chat-message bot" id="loader-container">
+                <div class="chat-bubble chat-bot">
+                    <div class="loader"></div>
+                </div>
+            </div>
+        `);
+          }
+
+          // Auto-scroll to the latest message
+          historyContainer.animate(
+            { scrollTop: historyContainer.prop("scrollHeight") },
+            500
+          );
+        }
+
+        // Fetch Source Documents
+        $("#fetch-docs-btn").click(function () {
+          if (!lastQuery) {
+            alert("Please submit a question first.");
+            return;
+          }
+
+          var csrfToken = $("input[name='csrfmiddlewaretoken']").val();
+
+          $.ajax({
+            url: "{% url 'index' %}",
+            type: "POST",
+            data: {
+              fetch: true,
+              query: lastQuery,
+              csrfmiddlewaretoken: csrfToken,
+            },
+            dataType: "json",
+            success: function (response) {
+              $("#source-docs-container").show();
+              $("#source-docs-list").empty();
+
+              var content = response.content || "";
+              var documents = content
+                .split("Document ")
+                .filter((doc) => doc.trim() !== "");
+
+              if (documents.length === 0) {
+                $("#source-docs-list").html(
+                  '<p class="no-docs-message"> No relevant source documents found.</p>'
+                );
+                return;
+              }
+
+              documents.forEach(function (doc, index) {
+                let docTitle = `Document ${index + 1}`;
+                let docContent = doc.trim();
+
+                let listItem = $("<div>").addClass("document-card");
+                let header = $("<div>")
+                  .addClass("doc-header")
+                  .html(
+                    `<span> ${docTitle}</span> <button class="toggle-btn"></button>`
+                  );
+                let contentDiv = $("<div>")
+                  .addClass("doc-content")
+                  .text(docContent)
+                  .hide();
+
+                // Check if document contains a URL
+                if (docContent.includes("http")) {
+                  let urlMatch = docContent.match(/https?:\/\/[^\s]+/);
+                  if (urlMatch) {
+                    let link = $("<a>")
+                      .attr("href", urlMatch[0])
+                      .attr("target", "_blank")
+                      .text("🔗 Open Source Document");
+                    contentDiv.append("<br>").append(link);
+                  }
+                }
+
+                header.click(function () {
+                  contentDiv.slideToggle(300);
+                  $(this)
+                    .find(".toggle-btn")
+                    
+                });
+
+                listItem.append(header).append(contentDiv);
+                $("#source-docs-list").append(listItem);
+              });
+            },
+            error: function () {
+              alert("❌ Error fetching source documents. Please try again.");
             },
           });
         });
