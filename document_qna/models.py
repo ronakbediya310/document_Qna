@@ -4,7 +4,7 @@ from django.db import models
  
 
 class SourceDocument(models.Model):
-    query = models.CharField(max_length=500, unique=True)
+    query = models.CharField(max_length=255, unique=True)
     file_path = models.FileField(upload_to="retrieved_docs/", null=True, blank=True)
     content = models.TextField()
 
@@ -15,14 +15,13 @@ class SourceDocument(models.Model):
         return self.query
 
 
-from django.db import models
-
 class UnansweredQuestion(models.Model):
-    question = models.CharField(max_length=500, unique=True)
+    id = models.AutoField(primary_key=True)  # Ensure primary key is defined
+    question = models.CharField(max_length=255, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = "document_qna_unansweredquestion"
+        db_table = "document_qna_unansweredquestion" 
 
    
 
