@@ -1,7 +1,7 @@
 from django.db import models
 
 # Create your models here.
-
+ 
 
 class SourceDocument(models.Model):
     query = models.CharField(max_length=500, unique=True)
@@ -18,12 +18,11 @@ class SourceDocument(models.Model):
 from django.db import models
 
 class UnansweredQuestion(models.Model):
-    id = models.AutoField(primary_key=True)  
-    question = models.TextField(unique=True)
+    question = models.CharField(max_length=500, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = "document_qna_unansweredquestion"
 
-    def __str__(self):
-        return self.question
+   
+
