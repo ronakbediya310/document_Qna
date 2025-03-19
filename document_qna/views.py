@@ -3,7 +3,7 @@ import json
 import time
 import pymysql
 import re
-import spacy
+
 import pickle
 from django.http import JsonResponse, FileResponse
 from django.shortcuts import get_object_or_404
@@ -28,7 +28,7 @@ from langchain.memory import ConversationBufferWindowMemory
 from langchain.chains import ConversationalRetrievalChain
 from django.conf import settings
 
-nlp = spacy.load("en_core_web_sm")
+
 
 ## Initialization
 load_dotenv()
