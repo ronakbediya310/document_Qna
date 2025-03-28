@@ -12,19 +12,19 @@
   <body>
     <div class="main-container">
       <!-- Header Section -->
-      <!-- <header> -->
-      <h1>Document Q&A System</h1>
-      <!-- <div class="toggle-container">
+      <header>
+        <h1>Document Q&A System</h1>
+        <div class="toggle-container">
           <label>Show Upload Section</label>
           <label class="toggle-switch">
             <input type="checkbox" id="toggle-upload" checked />
             <span class="slider"></span>
           </label>
         </div>
-      </header>  -->
+      </header>
 
       <!-- Upload Section -->
-      <!-- <div id="upload-container">
+      <div id="upload-container">
         <section class="upload-section">
           <h2>Upload a Document (PDF, JSON, CSV)</h2>
           <form method="post" enctype="multipart/form-data" class="form">
@@ -41,8 +41,8 @@
             />
             <button type="submit" class="btn">Upload</button>
           </form>
-        </section> 
-       </div> -->
+        </section>
+      </div>
 
       <!-- Query & Response Container -->
       <div class="query-response-container">
@@ -58,22 +58,6 @@
             ></textarea>
             <button type="submit" class="btn">Ask</button>
           </form>
-        </section>
-
-        <!-- Response Section -->
-        <section class="response-content response-section">
-          <h3>Response Section...</h3>
-          <div class="chat-history">
-            <div id="chat-history">
-              <div id="chat-loader" style="display: none">
-                <div class="chat-bubble chat-bot">
-                  <div class="loader" id="loader"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Fetch Source Documents Button -->
           <button
             id="fetch-docs-btn"
             class="btn"
@@ -87,6 +71,19 @@
             <h4>📄 Source Documents</h4>
             <div id="source-docs-list" class="docs-list"></div>
           </div>
+        </section>
+
+        <!-- Response Section -->
+        <section class="response-content response-section">
+          <h3>Response Section...</h3>
+          <div class="chat-history">
+            <div id="chat-history">
+            </div> 
+            <div id="chat-loader" class ="loader"style="display: none;"></div>
+          </div>
+          
+          </div>
+          <!-- Fetch Source Documents Button -->
           <p
             id="message-response"
             class="message-box"
@@ -108,13 +105,13 @@
         var lastQuery = ""; // Store the last query
         var lastQueries = [];
         var lastResponses = [];
+
         $("#toggle-upload").change(function () {
           $("#upload-container").slideToggle(300, function () {
-            if ($("#upload-container").is(":visible")) {
-              $(".query-response-container").removeClass("full-height");
-            } else {
-              $(".query-response-container").addClass("full-height");
-            }
+            $(".query-response-container").toggleClass(
+              "full-height",
+              !$("#upload-container").is(":visible")
+            );
           });
         });
 
@@ -124,28 +121,31 @@
         $("#query-form").submit(function (event) {
           event.preventDefault();
           var queryText = $("#query").val().trim();
-          $("#fetch-docs-btn").hide();
-          $("#source-docs-container").hide();
+          $("#fetch-docs-btn, #source-docs-container").hide();
           $("#query").val("");
 
           if (!queryText) {
             alert("Please enter a question.");
             return;
           }
+
           $("#chat-loader").show();
           lastQuery = queryText; // Store the query for later use
 
-          $("#res, #restime").hide();
-          $("#loader").show();
-          $(".answer, .response-time").hide();
-          $("#message-response").hide().text("");
+          $(
+            "#res, #restime, #loader, .answer, .response-time, #message-response"
+          ).hide();
 
           var csrfToken = $("input[name='csrfmiddlewaretoken']").val();
 
           $.ajax({
-            url: "{% url 'index' %}",
+            url: "{% url 'query_api' %}",
             type: "POST",
-            data: { query: queryText, csrfmiddlewaretoken: csrfToken },
+            contentType: "application/json",
+            data: JSON.stringify({ 
+        query: queryText, 
+        token: "a7222a92-8b10-4050-8b26-894dc6f45918" 
+        }),
             dataType: "json",
             success: function (response) {
               $("#res, #restime").show();
@@ -163,55 +163,59 @@
 
               updateChatHistory();
 
-              // Show fetch button after receiving response
-              $("#fetch-docs-btn").show();
-
+              $("#fetch-docs-btn").fadeIn();
               $("#message-response")
                 .text("Response received successfully!")
                 .fadeIn()
                 .delay(3000)
                 .fadeOut();
             },
-            error: function () {
-              alert("An error occurred. Please try again.");
+            error: function (xhr, status, error) {
+                console.log("Error Status:", status);
+                console.log("XHR Response:", xhr.responseText);
+                console.log("Error Thrown:", error);
             },
+
             complete: function () {
-              $("#loader").hide();
+              $("#chat-loader").hide();
             },
           });
         });
+
         function updateChatHistory() {
           var historyContainer = $("#chat-history");
-          historyContainer.empty();
+          historyContainer.children(":not(#chat-loader)").remove();
+          let lastMessageId = "last-message";
 
           for (let i = 0; i < lastQueries.length; i++) {
             let userMessage = `<div class="chat-message user">
-                              <div class="chat-bubble chat-user">Question: ${lastQueries[i]}</div>
-                           </div>`;
-            let botMessage = `<div class="chat-message bot">
-                              <div class="chat-bubble chat-bot">Answer: ${lastResponses[i]}</div>
-                           </div>`;
+                                <div class="chat-bubble chat-user">Question: ${lastQueries[i]}</div>
+                               </div>`;
+            let botMessage = `<div class="chat-message bot" id="${
+              i === lastQueries.length - 1 ? lastMessageId : ""
+            }">
+                                <div class="chat-bubble chat-bot">Answer: ${
+                                  lastResponses[i]
+                                }</div>
+                               </div>`;
 
             historyContainer.append(userMessage);
             historyContainer.append(botMessage);
           }
 
-          // Add loader message at the end (if waiting for response)
-          if ($("#loader-container").is(":visible")) {
-            historyContainer.append(`
-            <div class="chat-message bot" id="loader-container">
-                <div class="chat-bubble chat-bot">
-                    <div class="loader"></div>
-                </div>
-            </div>
-        `);
+          let lastMessage = $("#" + lastMessageId);
+          if (lastMessage.length) {
+            lastMessage[0].scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+            lastMessage.focus();
+          } else {
+            historyContainer.animate(
+              { scrollTop: historyContainer.prop("scrollHeight") },
+              500
+            );
           }
-
-          // Auto-scroll to the latest message
-          historyContainer.animate(
-            { scrollTop: historyContainer.prop("scrollHeight") },
-            500
-          );
         }
 
         // Fetch Source Documents
@@ -233,13 +237,11 @@
             },
             dataType: "json",
             success: function (response) {
-              $("#source-docs-container").show();
+              $("#source-docs-container").fadeIn();
               $("#source-docs-list").empty();
 
-              var content = response.content || "";
-              var documents = content
-                .split("Document ")
-                .filter((doc) => doc.trim() !== "");
+              var documents = response.documents || [];
+              console.log(response);
 
               if (documents.length === 0) {
                 $("#source-docs-list").html(
@@ -249,45 +251,25 @@
               }
 
               documents.forEach(function (doc, index) {
-                let docTitle = `Document ${index + 1}`;
-                let docContent = doc.trim();
+                let docTitle = doc.title ? doc.title : `Document ${index + 1}`;
+                let docSource = doc.source || "Unknown Source";
+                let filePath = doc.file_path || "#";
 
-                let listItem = $("<div>").addClass("document-card");
-                let header = $("<div>")
-                  .addClass("doc-header")
-                  .html(
-                    `<span> ${docTitle}</span> <button class="toggle-btn"></button>`
-                  );
-                let contentDiv = $("<div>")
-                  .addClass("doc-content")
-                  .text(docContent)
-                  .hide();
+                let listItem = `
+                        <div class="document-item">
+                            <p class="doc-title">${
+                              index + 1
+                            }. <strong>${docTitle}</strong></p>
+                            <p class="doc-source">Source Type: ${docSource}</p>
+                            <p><a href="${filePath}" target="_blank" class="doc-link">🔗 Open Document</a></p>
+                        </div>
+                    `;
 
-                // Check if document contains a URL
-                if (docContent.includes("http")) {
-                  let urlMatch = docContent.match(/https?:\/\/[^\s]+/);
-                  if (urlMatch) {
-                    let link = $("<a>")
-                      .attr("href", urlMatch[0])
-                      .attr("target", "_blank")
-                      .text("🔗 Open Source Document");
-                    contentDiv.append("<br>").append(link);
-                  }
-                }
-
-                header.click(function () {
-                  contentDiv.slideToggle(300);
-                  $(this)
-                    .find(".toggle-btn")
-                    
-                });
-
-                listItem.append(header).append(contentDiv);
                 $("#source-docs-list").append(listItem);
               });
             },
             error: function () {
-              alert("❌ Error fetching source documents. Please try again.");
+              alert("Error fetching source documents. Please try again.");
             },
           });
         });
